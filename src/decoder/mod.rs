@@ -7,7 +7,6 @@ use std::mem;
 use std::borrow;
 use std::io::{Read, Write, BufReader, BufRead};
 
-use crate::traits::{HasParameters, Parameter};
 use crate::common::{ColorType, BitDepth, Info, Transformations};
 use crate::filter::{unfilter, FilterType};
 use crate::chunk::IDAT;
@@ -28,14 +27,6 @@ impl Parameter<Reader> for InterlaceHandling {
         this.color_output = self
     }
 }*/
-
-
-impl<R: Read> Parameter<Decoder<R>> for Transformations {
-    fn set_param(self, this: &mut Decoder<R>) {
-        this.transform = self
-    }
-}
-
 
 /// Output info
 pub struct OutputInfo {
@@ -111,6 +102,37 @@ impl<R: Read> Decoder<R> {
         self.limits = limits;
     }
 
+    /// Set data transformation flags for the decoder.
+    ///
+    /// ### Example: Get Indexed Bytes of Paletted Image
+    /// ```
+    /// use std::fs::File;
+    /// use png::{Decoder, Transformations};
+    ///
+    /// // transformations omitting EXPAND will produce indexed bytes for paletted images
+    /// let transformations = Transformations::IDENTITY;
+    ///
+    /// // any image in pngsuite ending with "3pXX" is a paletted image
+    /// let mut decoder = Decoder::new(File::open("tests/pngsuite/basi3p01.png").unwrap());
+    /// decoder.set_transforms(transformations);
+    ///
+    /// let (_, mut reader) = decoder.read_info().unwrap();
+    /// let mut buf = vec![0u8; reader.output_buffer_size()];
+    /// reader.next_frame(&mut buf).unwrap();
+    ///
+    /// let palette = reader.info().palette.as_ref().unwrap();
+    ///
+    /// assert_eq!(palette[buf[0] as usize], 238);
+    /// assert_eq!(palette[buf[1] as usize], 0);
+    /// ```
+    pub fn set_transforms(&mut self, transform: crate::Transformations) {
+        self.transform = transform;
+    }
+
+    pub fn transforms_mut(&mut self) -> &mut crate::Transformations {
+        &mut self.transform
+    }
+
     /// Reads all meta data until the first IDAT chunk
     pub fn read_info(self) -> Result<(OutputInfo, Reader<R>), DecodingError> {
         let mut r = Reader::new(self.r, StreamingDecoder::new(), self.transform, self.limits);
@@ -129,8 +151,6 @@ impl<R: Read> Decoder<R> {
         Ok((info, r))
     }
 }
-
-impl<R: Read> HasParameters for Decoder<R> {}
 
 struct ReadDecoder<R: Read> {
     reader: BufReader<R>,
